@@ -1,4 +1,40 @@
-https://themichaeljava.github.io/MapBuilderTestCanvas/      min-height: 500px;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stamp Canvas</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #ffffff;
+      --bg-2:      #f5f4f1;
+      --bg-3:      #eeecea;
+      --text:      #1a1a18;
+      --text-2:    #6b6a66;
+      --text-3:    #a8a7a2;
+      --border:    rgba(0,0,0,0.10);
+      --border-2:  rgba(0,0,0,0.18);
+      --blue:      #378ADD;
+      --blue-bg:   #E6F1FB;
+      --radius:    8px;
+      --radius-lg: 12px;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-2);
+      color: var(--text);
+    }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    #app {
+      display: flex;
+      width: 100%;
+      height: 100vh;
+      min-height: 500px;
     }
 
     /* ── Sidebar ───────────────────────────────────────────────────── */
@@ -271,9 +307,9 @@ https://themichaeljava.github.io/MapBuilderTestCanvas/      min-height: 500px;
     <div id="brush-scroll"></div>
     <div id="controls">
       <div class="ctrl-row">
-        <span class="ctrl-label">Size</span>
-        <input type="range" id="size-slider" min="20" max="200" value="80" step="1">
-        <span class="ctrl-val" id="size-val">80</span>
+        <span class="ctrl-label">Scale</span>
+        <input type="range" id="size-slider" min="10" max="300" value="100" step="1">
+        <span class="ctrl-val" id="size-val">100%</span>
       </div>
       <div class="ctrl-row">
         <span class="ctrl-label">Rotate</span>
@@ -326,7 +362,7 @@ https://themichaeljava.github.io/MapBuilderTestCanvas/      min-height: 500px;
 //   index.html  (this file)
 //   stamps/
 //     Forest1.png, Forest2.png, Forest3.png, Forest4.png
-//     MountainRange.png, Mountain1.png, Moutain2.png, Mountain3.png
+//     MountainRange.png, Mountain1.png, Mountain2.png, Mountain3.png
 //     Hills1.png, Hills2.png, Hills3.png, Hills4.png
 //     Dunes1.png, Dunes2.png
 //     Cliff1.png, Cliff2.png, Cliff3.png, Cliff4.png
@@ -403,7 +439,7 @@ const BRUSHES = [
 const CANVAS_W = 2000, CANVAS_H = 2000;
 
 let selectedId   = BRUSHES[0].id;
-let stampSize    = 80;
+let stampScale   = 1.0;   // 1.0 = native pixel size of the PNG
 let stampRot     = 0;
 let stampOpacity = 1.0;
 let showGrid     = true;
@@ -530,33 +566,29 @@ function drawGrid() {
 }
 
 // ── Stamp rendering ───────────────────────────────────────────────────────────
-// stampSize controls the longer dimension; the shorter dimension scales
-// proportionally so each PNG keeps its natural aspect ratio.
-// multiply blend mode makes white PNG backgrounds invisible against the canvas.
-function stampDims(img, size) {
-  const iw = img.naturalWidth  || img.width  || 1;
-  const ih = img.naturalHeight || img.height || 1;
-  const aspect = iw / ih;
-  let w, h;
-  if (aspect >= 1) { w = size; h = size / aspect; }
-  else             { h = size; w = size * aspect; }
-  return [w, h];
+// Each stamp renders at its native PNG pixel dimensions × scale × zoom.
+// multiply blend mode makes white PNG backgrounds invisible.
+function stampDims(img, scale, forExport) {
+  const iw = img.naturalWidth  || img.width  || 100;
+  const ih = img.naturalHeight || img.height || 100;
+  // On canvas coords (forExport): native size × scale
+  // On screen: also × zoom
+  const factor = forExport ? scale : scale * zoom;
+  return [iw * factor, ih * factor];
 }
 
 function drawStamp(ctx, stamp, forExport) {
   const img = brushImages[stamp.id];
   if (!img) return;
+  const [w, h] = stampDims(img, stamp.scale, forExport);
   ctx.save();
   ctx.globalAlpha = stamp.opacity;
   ctx.globalCompositeOperation = 'multiply';
   if (forExport) {
-    const [w, h] = stampDims(img, stamp.size);
     ctx.translate(stamp.cx, stamp.cy);
     ctx.rotate(stamp.rot * Math.PI / 180);
     ctx.drawImage(img, -w / 2, -h / 2, w, h);
   } else {
-    const s = stamp.size * zoom;
-    const [w, h] = stampDims(img, s);
     const [vx, vy] = canvasToView(stamp.cx, stamp.cy);
     ctx.translate(vx, vy);
     ctx.rotate(stamp.rot * Math.PI / 180);
@@ -576,8 +608,7 @@ function drawGhost() {
   if (!mouseOnCanvas) return;
   const img = brushImages[selectedId];
   if (!img) return;
-  const s = stampSize * zoom;
-  const [w, h] = stampDims(img, s);
+  const [w, h] = stampDims(img, stampScale, false);
   hCtx.save();
   hCtx.globalAlpha = stampOpacity * 0.45;
   hCtx.globalCompositeOperation = 'multiply';
@@ -590,7 +621,7 @@ function drawGhost() {
 // ── Place stamp ───────────────────────────────────────────────────────────────
 function placeStamp(vx, vy) {
   const [cx, cy] = viewToCanvas(vx, vy);
-  const stamp = { id: selectedId, cx, cy, size: stampSize, rot: stampRot, opacity: stampOpacity };
+  const stamp = { id: selectedId, cx, cy, scale: stampScale, rot: stampRot, opacity: stampOpacity };
   history.push(stamp);
   future.length = 0;
   updateUndoRedo();
@@ -709,8 +740,8 @@ document.getElementById('export-btn').addEventListener('click', () => {
 });
 
 document.getElementById('size-slider').addEventListener('input', function () {
-  stampSize = +this.value;
-  document.getElementById('size-val').textContent = this.value;
+  stampScale = +this.value / 100;
+  document.getElementById('size-val').textContent = this.value + '%';
   drawGhost();
 });
 document.getElementById('rot-slider').addEventListener('input', function () {
