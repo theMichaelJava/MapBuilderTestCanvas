@@ -298,6 +298,57 @@
       line-height: 1.7;
       pointer-events: none;
     }
+    /* ── Brush preview popup ───────────────────────────────────────── */
+    #brush-preview {
+      position: fixed;
+      z-index: 9999;
+      pointer-events: none;
+      display: none;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 5px;
+    }
+    #brush-preview.visible {
+      display: flex;
+    }
+    #brush-preview-box {
+      background: var(--bg);
+      border: 0.5px solid var(--border-2);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.15), 0 1px 4px rgba(0,0,0,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      min-width: 56px;
+      min-height: 56px;
+    }
+    #brush-preview-canvas { display: block; }
+    #brush-preview-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text);
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 3px 10px;
+      white-space: nowrap;
+    }
+    #brush-preview-dims {
+      font-size: 10px;
+      color: var(--text-3);
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2px 10px;
+      white-space: nowrap;
+    }
+    #brush-preview-hint {
+      font-size: 10px;
+      color: var(--text-3);
+      white-space: nowrap;
+      padding: 0 2px;
+    }
   </style>
 </head>
 <body>
@@ -357,6 +408,7 @@
   </div>
   <div id="brush-preview-label"></div>
   <div id="brush-preview-dims"></div>
+  <div id="brush-preview-hint">click to select · right-click to preview</div>
 </div>
 
 <script>
@@ -497,34 +549,32 @@ const previewCvs   = document.getElementById('brush-preview-canvas');
 const previewLabel = document.getElementById('brush-preview-label');
 const previewDims  = document.getElementById('brush-preview-dims');
 const previewCtx   = previewCvs.getContext('2d');
-const PREVIEW_MAX  = 200;
+const PREVIEW_MAX  = 220;
 
-function showBrushPreview(b, btnEl) {
+function showBrushPreview(b, x, y) {
   const img = brushImages[b.id];
-  if (!img) return;
+  if (!img || !img.naturalWidth) return;
 
-  const iw = img.naturalWidth  || img.width  || 100;
-  const ih = img.naturalHeight || img.height || 100;
-
-  const brushDef   = BRUSHES.find(x => x.id === b.id);
+  const iw = img.naturalWidth;
+  const ih = img.naturalHeight;
+  const brushDef   = BRUSHES.find(d => d.id === b.id);
   const brushScale = (brushDef && brushDef.scale) ? brushDef.scale : 1;
   const factor     = stampScale * brushScale * zoom;
   const rendW      = Math.round(iw * factor);
   const rendH      = Math.round(ih * factor);
 
+  // Scale to fit preview box
   const longest  = Math.max(rendW, rendH, 1);
   const fitScale = longest > PREVIEW_MAX ? PREVIEW_MAX / longest : 1;
   const dispW    = Math.max(1, Math.round(rendW * fitScale));
   const dispH    = Math.max(1, Math.round(rendH * fitScale));
-
-  const boxW = Math.max(dispW, 56);
-  const boxH = Math.max(dispH, 56);
+  const boxW     = Math.max(dispW, 64);
+  const boxH     = Math.max(dispH, 64);
 
   previewBox.style.width  = boxW + 'px';
   previewBox.style.height = boxH + 'px';
   previewCvs.width  = boxW;
   previewCvs.height = boxH;
-
   previewCtx.clearRect(0, 0, boxW, boxH);
   previewCtx.save();
   previewCtx.globalAlpha = stampOpacity;
@@ -533,20 +583,26 @@ function showBrushPreview(b, btnEl) {
 
   previewLabel.textContent = b.label;
   const scaled = rendW > PREVIEW_MAX || rendH > PREVIEW_MAX;
-  previewDims.textContent  = rendW + ' × ' + rendH + 'px' + (scaled ? '  (preview scaled)' : '');
+  previewDims.textContent  = rendW + ' × ' + rendH + 'px' + (scaled ? ' (scaled to fit)' : '');
 
-  const btnRect    = btnEl.getBoundingClientRect();
-  const popH       = boxH + 5 + 22 + 5 + 18;
-  const topIdeal   = btnRect.top + (btnRect.height / 2) - (popH / 2);
-  const topClamped = Math.max(8, Math.min(topIdeal, window.innerHeight - popH - 8));
-  previewEl.style.top = topClamped + 'px';
+  // Position popup to the right of the click, clamped to viewport
+  const popW = boxW + 24;
+  const popH = boxH + 24 + 22 + 18 + 14;
+  const left = (x + 12 + popW > window.innerWidth)  ? x - popW - 8 : x + 12;
+  const top  = (y + popH      > window.innerHeight) ? window.innerHeight - popH - 8 : y;
 
+  previewEl.style.left = left + 'px';
+  previewEl.style.top  = top  + 'px';
   previewEl.classList.add('visible');
 }
 
 function hideBrushPreview() {
   previewEl.classList.remove('visible');
 }
+
+// Clicking anywhere outside the sidebar hides the preview
+document.addEventListener('click', hideBrushPreview);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideBrushPreview(); });
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function buildSidebar() {
@@ -591,11 +647,14 @@ function buildSidebar() {
         selectedId = b.id;
         document.querySelectorAll('.brush-btn').forEach(x => x.classList.remove('active'));
         btn.classList.add('active');
+        hideBrushPreview();
         drawGhost();
       });
 
-      btn.addEventListener('mouseenter', () => showBrushPreview(b, btn));
-      btn.addEventListener('mouseleave', hideBrushPreview);
+      btn.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        showBrushPreview(b, e.clientX, e.clientY);
+      });
 
       grid.appendChild(btn);
     });
