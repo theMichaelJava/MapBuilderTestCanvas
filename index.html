@@ -194,16 +194,18 @@
       flex: 1;
       position: relative;
       overflow: hidden;
-      background: #d4c49a;
+      background-image: url('paperbg.jpg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
       cursor: crosshair;
     }
 
-    #parchment-canvas, #grid-canvas, #stamp-canvas, #ghost-canvas {
+    #grid-canvas, #stamp-canvas, #ghost-canvas {
       position: absolute;
       top: 0; left: 0;
     }
 
-    #parchment-canvas { pointer-events: none; }
     #ghost-canvas  { pointer-events: none; }
     #grid-canvas   { pointer-events: none; }
 
@@ -327,7 +329,6 @@
 
   <!-- ── Canvas ── -->
   <div id="canvas-wrap">
-    <canvas id="parchment-canvas"></canvas>
     <canvas id="grid-canvas"></canvas>
     <canvas id="stamp-canvas"></canvas>
     <canvas id="ghost-canvas"></canvas>
@@ -444,8 +445,8 @@ let selectedId   = BRUSHES[0].id;
 let stampScale   = 1.0;   // 1.0 = native pixel size of the PNG
 let stampRot     = 0;
 let stampOpacity = 1.0;
-let showGrid     = false;
-let zoom         = 0.2;
+let showGrid     = true;
+let zoom         = 1.0;
 let panX         = 0, panY = 0;
 let isPanning    = false;
 let lastPx       = 0, lastPy = 0;
@@ -457,11 +458,9 @@ const future  = [];
 const brushImages = {};
 
 const wrap        = document.getElementById('canvas-wrap');
-const parchCvs    = document.getElementById('parchment-canvas');
 const gridCvs     = document.getElementById('grid-canvas');
 const stampCvs    = document.getElementById('stamp-canvas');
 const ghostCvs    = document.getElementById('ghost-canvas');
-const pCtx        = parchCvs.getContext('2d');
 const gCtx        = gridCvs.getContext('2d');
 const sCtx        = stampCvs.getContext('2d');
 const hCtx        = ghostCvs.getContext('2d');
@@ -536,123 +535,10 @@ function buildSidebar() {
   });
 }
 
-// ── Parchment texture ─────────────────────────────────────────────────────────
-// Generates a warm vellum/parchment look using layered noise and a sepia wash.
-// The texture is baked once into an offscreen canvas, then drawn at the current
-// pan/zoom so it feels like the canvas surface itself has grain.
-let parchmentOffscreen = null;
-
-function buildParchmentOffscreen() {
-  const oc  = document.createElement('canvas');
-  oc.width  = CANVAS_W;
-  oc.height = CANVAS_H;
-  const ox  = oc.getContext('2d');
-
-  // Base warm parchment fill
-  ox.fillStyle = '#f2e8c8';
-  ox.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-  // Layered noise passes — each pass uses a different scale & opacity
-  // to build up organic grain without any external assets
-  const noiseData = ox.createImageData(CANVAS_W, CANVAS_H);
-  const nd = noiseData.data;
-
-  // Seeded LCG pseudo-random for reproducible texture
-  let seed = 42;
-  function rand() {
-    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
-    return (seed >>> 0) / 0xffffffff;
-  }
-
-  for (let i = 0; i < nd.length; i += 4) {
-    const px = (i / 4) % CANVAS_W;
-    const py = Math.floor((i / 4) / CANVAS_W);
-
-    // Large-scale tonal variation — gives uneven aging look
-    const large = Math.sin(px * 0.003) * Math.cos(py * 0.002) * 0.5 + 0.5;
-    // Medium fibrous grain
-    const med   = Math.sin(px * 0.018 + py * 0.007) * 0.5 + 0.5;
-    // Fine pixel noise
-    const fine  = rand();
-
-    // Combine into a warm brownish shift
-    const tone = large * 10 + med * 6 + fine * 14 - 10;
-
-    nd[i]     = Math.min(255, Math.max(0, tone * 1.0));  // R — warm
-    nd[i + 1] = Math.min(255, Math.max(0, tone * 0.8));  // G
-    nd[i + 2] = Math.min(255, Math.max(0, tone * 0.45)); // B — minimal blue
-    nd[i + 3] = 42; // alpha — lighter overlay
-  }
-  ox.putImageData(noiseData, 0, 0);
-
-  // Horizontal fiber streaks — mimic paper grain direction
-  ox.globalAlpha = 0.06;
-  for (let y = 0; y < CANVAS_H; y += 3 + Math.floor(rand() * 5)) {
-    ox.beginPath();
-    ox.moveTo(0, y);
-    // Slightly wavy lines
-    for (let x = 0; x < CANVAS_W; x += 80) {
-      ox.lineTo(x + 80, y + (rand() - 0.5) * 2);
-    }
-    ox.strokeStyle = `rgba(90,60,20,${0.03 + rand() * 0.08})`;
-    ox.lineWidth = 0.5 + rand();
-    ox.stroke();
-  }
-
-  // Subtle vignette — darker edges, lighter centre
-  ox.globalAlpha = 1;
-  const vignette = ox.createRadialGradient(
-    CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.2,
-    CANVAS_W / 2, CANVAS_H / 2, CANVAS_W * 0.85
-  );
-  vignette.addColorStop(0, 'rgba(90,55,10,0)');
-  vignette.addColorStop(1, 'rgba(60,35,5,0.12)');
-  ox.fillStyle = vignette;
-  ox.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-  // Faint torn/aged edge bleed at border
-  ox.globalAlpha = 0.08;
-  ox.strokeStyle = 'rgba(80,50,15,0.4)';
-  ox.lineWidth = 18;
-  ox.strokeRect(9, 9, CANVAS_W - 18, CANVAS_H - 18);
-  ox.globalAlpha = 1;
-
-  parchmentOffscreen = oc;
-}
-
-function drawParchment() {
-  const w = parchCvs.width, h = parchCvs.height;
-  pCtx.clearRect(0, 0, w, h);
-
-  // Dark outer surround — the "table" behind the parchment sheet
-  pCtx.fillStyle = '#d4c49a';
-  pCtx.fillRect(0, 0, w, h);
-
-  if (!parchmentOffscreen) return;
-
-  // Draw the parchment sheet at current pan/zoom position
-  const sw = CANVAS_W * zoom;
-  const sh = CANVAS_H * zoom;
-  pCtx.drawImage(parchmentOffscreen, panX, panY, sw, sh);
-
-  // Subtle drop shadow around the sheet
-  const pad = 6;
-  pCtx.shadowColor = 'rgba(40,25,10,0.45)';
-  pCtx.shadowBlur  = 24;
-  pCtx.shadowOffsetX = 4;
-  pCtx.shadowOffsetY = 6;
-  pCtx.fillStyle = 'transparent';
-  // Draw a 1px rect just to trigger shadow render
-  pCtx.fillRect(panX - pad, panY - pad, sw + pad * 2, sh + pad * 2);
-  pCtx.shadowColor = 'transparent';
-  pCtx.shadowBlur  = 0;
-}
-
 // ── Canvas resize ─────────────────────────────────────────────────────────────
 function resizeCanvases() {
   const w = wrap.clientWidth, h = wrap.clientHeight;
-  [parchCvs, gridCvs, stampCvs, ghostCvs].forEach(c => { c.width = w; c.height = h; });
-  drawParchment();
+  [gridCvs, stampCvs, ghostCvs].forEach(c => { c.width = w; c.height = h; });
   drawGrid();
   redrawStamps();
   drawGhost();
@@ -761,7 +647,7 @@ function applyZoom(delta, cx, cy) {
   panX = cx - (cx - panX) * (zoom / before);
   panY = cy - (cy - panY) * (zoom / before);
   document.getElementById('zoom-display').textContent = Math.round(zoom * 100) + '%';
-  drawParchment(); drawGrid(); redrawStamps(); drawGhost();
+  drawGrid(); redrawStamps(); drawGhost();
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -794,7 +680,7 @@ wrap.addEventListener('mousemove', e => {
     panX += e.clientX - lastPx;
     panY += e.clientY - lastPy;
     lastPx = e.clientX; lastPy = e.clientY;
-    drawParchment(); drawGrid(); redrawStamps();
+    drawGrid(); redrawStamps();
   }
 
   drawGhost();
@@ -846,13 +732,8 @@ document.getElementById('export-btn').addEventListener('click', () => {
   const exp = document.createElement('canvas');
   exp.width = CANVAS_W; exp.height = CANVAS_H;
   const ectx = exp.getContext('2d');
-  // Draw parchment as the base layer
-  if (parchmentOffscreen) {
-    ectx.drawImage(parchmentOffscreen, 0, 0, CANVAS_W, CANVAS_H);
-  } else {
-    ectx.fillStyle = '#f2e8c8';
-    ectx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  }
+  ectx.fillStyle = '#f2e8c8';
+  ectx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   history.forEach(s => drawStamp(ectx, s, true));
   const a = document.createElement('a');
   a.download = 'canvas-export.png';
@@ -889,7 +770,6 @@ function showToast(msg) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  buildParchmentOffscreen();
   await Promise.all(BRUSHES.map(async b => {
     brushImages[b.id] = await svgToImage(b);
   }));
