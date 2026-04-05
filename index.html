@@ -194,7 +194,7 @@
       flex: 1;
       position: relative;
       overflow: hidden;
-      background-image: url('paperbg.jpg');
+      background-image: url('paperbg.webp');
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -769,7 +769,7 @@ document.getElementById('export-btn').addEventListener('click', () => {
     }
   }
 
-  // Try to draw paperbg.jpg first; if it fails or taints, skip it
+  // Try to draw paperbg.webp first; if it fails or taints, skip it
   const bgImg = new Image();
   bgImg.crossOrigin = 'anonymous';
 
@@ -806,7 +806,7 @@ document.getElementById('export-btn').addEventListener('click', () => {
     finish();
   };
 
-  bgImg.src = 'paperbg.jpg';
+  bgImg.src = 'paperbg.webp';
 });
 
 document.getElementById('size-slider').addEventListener('input', function () {
