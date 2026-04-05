@@ -312,7 +312,7 @@
       border-radius: var(--radius-lg);
       box-shadow: 0 6px 24px rgba(0,0,0,0.15), 0 1px 4px rgba(0,0,0,0.08);
       display: flex; align-items: center; justify-content: center;
-      overflow: hidden; min-width: 56px; min-height: 56px;
+      overflow: hidden; min-width: 64px; min-height: 64px;
     }
     #brush-preview-canvas { display: block; }
     #brush-preview-label {
@@ -378,7 +378,7 @@
       <button class="tool-btn" id="clear-btn" title="Clear canvas">✕</button>
     </div>
 
-    <div id="hint">Scroll to zoom &nbsp;·&nbsp; Alt+drag to pan &nbsp;·&nbsp; Ctrl+Z undo &nbsp;·&nbsp; Right-click a brush to preview &nbsp;·&nbsp; [ ] to resize</div>
+    <div id="hint">Scroll to zoom &nbsp;·&nbsp; Alt+drag to pan &nbsp;·&nbsp; Ctrl+Z undo</div>
     <div id="zoom-display">100%</div>
     <div id="coords-display">0, 0</div>
     <div id="toast"></div>
@@ -445,10 +445,10 @@ const BRUSHES = [
   { id:'clf-4',      category:'Cliffs', label:'Cliff 4',  src:'stamps/Cliff4.png' },
 
   // ── Rocks & Grass ──────────────────────────────────────────────────────────
-  { id:'rck-1',      category:'Rocks & Grass', label:'Rocks 1',  src:'stamps/Rocks1.png', scale:0.5 },
-  { id:'rck-2',      category:'Rocks & Grass', label:'Rocks 2',  src:'stamps/Rocks2.png', scale:0.5 },
-  { id:'grs-1',      category:'Rocks & Grass', label:'Grass 1',  src:'stamps/Grass1.png', scale:0.25 },
-  { id:'grs-2',      category:'Rocks & Grass', label:'Grass 2',  src:'stamps/Grass2.png', scale:0.25 },
+  { id:'rck-1',      category:'Rocks & Grass', label:'Rocks 1',  src:'stamps/Rocks1.png', scale:0.6 },
+  { id:'rck-2',      category:'Rocks & Grass', label:'Rocks 2',  src:'stamps/Rocks2.png', scale:0.6 },
+  { id:'grs-1',      category:'Rocks & Grass', label:'Grass 1',  src:'stamps/Grass1.png', scale:0.3 },
+  { id:'grs-2',      category:'Rocks & Grass', label:'Grass 2',  src:'stamps/Grass2.png', scale:0.3 },
 
   // ── Dunes ──────────────────────────────────────────────────────────────────
   { id:'dun-1',      category:'Dunes', label:'Dunes 1',  src:'stamps/Dunes1.png' },
@@ -524,22 +524,21 @@ const previewCvs   = document.getElementById('brush-preview-canvas');
 const previewLabel = document.getElementById('brush-preview-label');
 const previewDims  = document.getElementById('brush-preview-dims');
 const previewCtx   = previewCvs.getContext('2d');
-const PREVIEW_MAX  = 220;
+
+let lastPreviewedBrush = null;
 
 function showBrushPreview(b, x, y) {
   const img = brushImages[b.id];
   if (!img || !img.naturalWidth) return;
+  lastPreviewedBrush = { b, x, y };
   const iw = img.naturalWidth, ih = img.naturalHeight;
   const brushDef   = BRUSHES.find(d => d.id === b.id);
   const brushScale = (brushDef && brushDef.scale) ? brushDef.scale : 1;
-  const factor     = stampScale * brushScale * zoom;
-  const rendW      = Math.round(iw * factor);
-  const rendH      = Math.round(ih * factor);
-  const longest    = Math.max(rendW, rendH, 1);
-  const fitScale   = longest > PREVIEW_MAX ? PREVIEW_MAX / longest : 1;
-  const dispW      = Math.max(1, Math.round(rendW * fitScale));
-  const dispH      = Math.max(1, Math.round(rendH * fitScale));
-  const boxW = Math.max(dispW, 64), boxH = Math.max(dispH, 64);
+  const factor = stampScale * brushScale * zoom;
+  const dispW  = Math.max(1, Math.round(iw * factor));
+  const dispH  = Math.max(1, Math.round(ih * factor));
+  const boxW   = Math.max(dispW, 64);
+  const boxH   = Math.max(dispH, 64);
   previewBox.style.width  = boxW + 'px';
   previewBox.style.height = boxH + 'px';
   previewCvs.width = boxW; previewCvs.height = boxH;
@@ -549,8 +548,7 @@ function showBrushPreview(b, x, y) {
   previewCtx.drawImage(img, (boxW - dispW) / 2, (boxH - dispH) / 2, dispW, dispH);
   previewCtx.restore();
   previewLabel.textContent = b.label;
-  const scaled = rendW > PREVIEW_MAX || rendH > PREVIEW_MAX;
-  previewDims.textContent  = rendW + ' × ' + rendH + 'px' + (scaled ? ' (scaled to fit)' : '');
+  previewDims.textContent  = dispW + ' × ' + dispH + 'px';
   const popW = boxW + 24, popH = boxH + 24 + 22 + 18;
   const left = (x + 12 + popW > window.innerWidth)  ? x - popW - 8 : x + 12;
   const top  = (y + popH      > window.innerHeight) ? window.innerHeight - popH - 8 : y;
@@ -559,7 +557,17 @@ function showBrushPreview(b, x, y) {
   previewEl.classList.add('visible');
 }
 
-function hideBrushPreview() { previewEl.classList.remove('visible'); }
+function refreshPreview() {
+  if (lastPreviewedBrush && previewEl.classList.contains('visible')) {
+    const { b, x, y } = lastPreviewedBrush;
+    showBrushPreview(b, x, y);
+  }
+}
+
+function hideBrushPreview() {
+  previewEl.classList.remove('visible');
+  lastPreviewedBrush = null;
+}
 
 document.addEventListener('click', hideBrushPreview);
 
@@ -629,6 +637,7 @@ function resizeCanvases() {
   drawGrid();
   redrawStamps();
   drawGhost();
+  refreshLiveWatermark();
 }
 
 // ── Coordinates ───────────────────────────────────────────────────────────────
@@ -741,6 +750,12 @@ function applyZoom(delta, cx, cy) {
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
+wrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = wrap.getBoundingClientRect();
+  applyZoom(e.deltaY, e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+
 wrap.addEventListener('mousedown', e => {
   if (e.target.closest('#toolbar')) return; // ← add this
   if (e.button === 1 || e.altKey) {
@@ -805,6 +820,7 @@ document.addEventListener('keydown', e => {
     stampScale = next / 100;
     document.getElementById('size-val').textContent = next + '%';
     drawGhost();
+    refreshPreview();
   }
   if (e.key === 'Escape') hideBrushPreview();
 });
@@ -825,6 +841,57 @@ document.getElementById('clear-btn').addEventListener('click', () => {
   showToast('Canvas cleared');
 });
 
+// ── Watermark ─────────────────────────────────────────────────────────────────
+// Shared by both the live canvas overlay and the export.
+// Plain black EB Garamond text with a subtle white glow for legibility.
+let watermarkLogoImg = null;
+const watermarkCvs = document.createElement('canvas');
+watermarkCvs.style.cssText = 'position:absolute;bottom:0;left:0;pointer-events:none;z-index:5;';
+wrap.appendChild(watermarkCvs);
+const wmCtx = watermarkCvs.getContext('2d');
+
+function drawWatermarkOnCtx(ctx, logoImg, w, h) {
+  const LOGO_H    = 39;
+  const FONT_SIZE = 16.5;
+  const PAD       = 14;
+  const TEXT      = 'Created with the Map Builder Test Canvas from Map Effects.  |  MapEffects.co';
+  const FONT      = '600 ' + FONT_SIZE + "px 'EB Garamond', Georgia, serif";
+  ctx.save();
+  ctx.font = FONT;
+  ctx.textBaseline = 'middle';
+  const logoW = logoImg ? Math.round(LOGO_H * (logoImg.naturalWidth / logoImg.naturalHeight)) : 0;
+  const GAP   = logoImg ? 10 : 0;
+  const baseX = PAD;
+  const baseY = h - LOGO_H / 2 - PAD;
+  ctx.shadowColor   = 'rgba(255,255,255,0.9)';
+  ctx.shadowBlur    = 8;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  if (logoImg) {
+    ctx.drawImage(logoImg, baseX, baseY - LOGO_H / 2, logoW, LOGO_H);
+  }
+  ctx.fillStyle   = '#1a1a18';
+  ctx.globalAlpha = 0.85;
+  ctx.fillText(TEXT, baseX + logoW + GAP, baseY);
+  ctx.restore();
+}
+
+function refreshLiveWatermark() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  watermarkCvs.width  = w;
+  watermarkCvs.height = h;
+  wmCtx.clearRect(0, 0, w, h);
+  drawWatermarkOnCtx(wmCtx, watermarkLogoImg, w, h);
+}
+
+// Load logo once for the live watermark
+(function () {
+  const img = new Image();
+  img.onload  = () => { watermarkLogoImg = img; refreshLiveWatermark(); };
+  img.onerror = () => { watermarkLogoImg = null; refreshLiveWatermark(); };
+  img.src = 'logo.png';
+})();
+
 document.getElementById('export-btn').addEventListener('click', () => {
   const vw = wrap.clientWidth;
   const vh = wrap.clientHeight;
@@ -836,53 +903,10 @@ document.getElementById('export-btn').addEventListener('click', () => {
   const ectx = exp.getContext('2d');
   ectx.scale(dpr, dpr);
 
-  function drawWatermark(ctx, logoImg, w, h) {
-    const PAD       = 14;
-    const LOGO_H    = 39;
-    const FONT_SIZE = 16.5;
-    const TEXT      = 'Created with the Map Builder Test Canvas from Map Effects.  |  MapEffects.co';
-    const FONT      = '600 ' + FONT_SIZE + "px 'EB Garamond', Georgia, serif";
-    ctx.font = FONT;
-    const textW = ctx.measureText(TEXT).width;
-    const logoW = logoImg ? Math.round(LOGO_H * (logoImg.naturalWidth / logoImg.naturalHeight)) : 0;
-    const GAP   = logoImg ? 10 : 0;
-    const pillW = PAD + logoW + GAP + textW + PAD;
-    const pillH = LOGO_H + PAD;
-    const pillX = PAD;
-    const pillY = h - pillH - PAD;
-    const r     = 7;
-    ctx.save();
-    ctx.globalAlpha = 0.72;
-    ctx.fillStyle = '#1a1a18';
-    ctx.beginPath();
-    ctx.moveTo(pillX + r, pillY);
-    ctx.lineTo(pillX + pillW - r, pillY);
-    ctx.quadraticCurveTo(pillX + pillW, pillY, pillX + pillW, pillY + r);
-    ctx.lineTo(pillX + pillW, pillY + pillH - r);
-    ctx.quadraticCurveTo(pillX + pillW, pillY + pillH, pillX + pillW - r, pillY + pillH);
-    ctx.lineTo(pillX + r, pillY + pillH);
-    ctx.quadraticCurveTo(pillX, pillY + pillH, pillX, pillY + pillH - r);
-    ctx.lineTo(pillX, pillY + r);
-    ctx.quadraticCurveTo(pillX, pillY, pillX + r, pillY);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    if (logoImg) {
-      ctx.drawImage(logoImg, pillX + PAD, pillY + (pillH - LOGO_H) / 2, logoW, LOGO_H);
-    }
-    ctx.font = FONT;
-    ctx.fillStyle = '#ffffff';
-    ctx.globalAlpha = 0.90;
-    ctx.textBaseline = 'middle';
-    ctx.fillText(TEXT, pillX + PAD + logoW + GAP, pillY + pillH / 2);
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
   function finish(logoImg) {
     if (showGrid) ectx.drawImage(gridCvs, 0, 0, vw, vh);
     ectx.drawImage(stampCvs, 0, 0, vw, vh);
-    drawWatermark(ectx, logoImg, vw, vh);
+    drawWatermarkOnCtx(ectx, logoImg, vw, vh);
     try {
       const a = document.createElement('a');
       a.download = 'map-export.png';
@@ -895,7 +919,7 @@ document.getElementById('export-btn').addEventListener('click', () => {
       ectx.fillRect(0, 0, vw, vh);
       if (showGrid) ectx.drawImage(gridCvs, 0, 0, vw, vh);
       ectx.drawImage(stampCvs, 0, 0, vw, vh);
-      drawWatermark(ectx, logoImg, vw, vh);
+      drawWatermarkOnCtx(ectx, logoImg, vw, vh);
       const a = document.createElement('a');
       a.download = 'map-export.png';
       a.href = exp.toDataURL('image/png');
@@ -913,15 +937,11 @@ document.getElementById('export-btn').addEventListener('click', () => {
         const wrapAspect = vw / vh;
         let sx, sy, sw, sh;
         if (imgAspect > wrapAspect) {
-          sh = bgImg.naturalHeight;
-          sw = sh * wrapAspect;
-          sx = (bgImg.naturalWidth - sw) / 2;
-          sy = 0;
+          sh = bgImg.naturalHeight; sw = sh * wrapAspect;
+          sx = (bgImg.naturalWidth - sw) / 2; sy = 0;
         } else {
-          sw = bgImg.naturalWidth;
-          sh = sw / wrapAspect;
-          sx = 0;
-          sy = (bgImg.naturalHeight - sh) / 2;
+          sw = bgImg.naturalWidth; sh = sw / wrapAspect;
+          sx = 0; sy = (bgImg.naturalHeight - sh) / 2;
         }
         ectx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, vw, vh);
       } catch (e) {
@@ -938,7 +958,6 @@ document.getElementById('export-btn').addEventListener('click', () => {
     bgImg.src = 'paperbg.webp';
   }
 
-  // Load logo first, then background, then composite and download
   const logoImg = new Image();
   logoImg.crossOrigin = 'anonymous';
   logoImg.onload  = () => loadBgAndFinish(logoImg);
@@ -954,7 +973,7 @@ document.getElementById('size-slider').addEventListener('input', function () {
 document.getElementById('size-slider').addEventListener('dblclick', function () {
   this.value = 100; stampScale = 1.0;
   document.getElementById('size-val').textContent = '100%';
-  drawGhost();
+  drawGhost(); refreshPreview();
 });
 
 document.getElementById('rot-slider').addEventListener('input', function () {
@@ -976,7 +995,7 @@ document.getElementById('opacity-slider').addEventListener('input', function () 
 document.getElementById('opacity-slider').addEventListener('dblclick', function () {
   this.value = 100; stampOpacity = 1.0;
   document.getElementById('opacity-val').textContent = '100%';
-  drawGhost();
+  drawGhost(); refreshPreview();
 });
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
