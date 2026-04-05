@@ -490,6 +490,64 @@ function svgToImage(b) {
   });
 }
 
+// ── Brush preview popup ───────────────────────────────────────────────────────
+const previewEl    = document.getElementById('brush-preview');
+const previewBox   = document.getElementById('brush-preview-box');
+const previewCvs   = document.getElementById('brush-preview-canvas');
+const previewLabel = document.getElementById('brush-preview-label');
+const previewDims  = document.getElementById('brush-preview-dims');
+const previewCtx   = previewCvs.getContext('2d');
+const PREVIEW_MAX  = 200;
+
+function showBrushPreview(b, btnEl) {
+  const img = brushImages[b.id];
+  if (!img) return;
+
+  const iw = img.naturalWidth  || img.width  || 100;
+  const ih = img.naturalHeight || img.height || 100;
+
+  const brushDef   = BRUSHES.find(x => x.id === b.id);
+  const brushScale = (brushDef && brushDef.scale) ? brushDef.scale : 1;
+  const factor     = stampScale * brushScale * zoom;
+  const rendW      = Math.round(iw * factor);
+  const rendH      = Math.round(ih * factor);
+
+  const longest  = Math.max(rendW, rendH, 1);
+  const fitScale = longest > PREVIEW_MAX ? PREVIEW_MAX / longest : 1;
+  const dispW    = Math.max(1, Math.round(rendW * fitScale));
+  const dispH    = Math.max(1, Math.round(rendH * fitScale));
+
+  const boxW = Math.max(dispW, 56);
+  const boxH = Math.max(dispH, 56);
+
+  previewBox.style.width  = boxW + 'px';
+  previewBox.style.height = boxH + 'px';
+  previewCvs.width  = boxW;
+  previewCvs.height = boxH;
+
+  previewCtx.clearRect(0, 0, boxW, boxH);
+  previewCtx.save();
+  previewCtx.globalAlpha = stampOpacity;
+  previewCtx.drawImage(img, (boxW - dispW) / 2, (boxH - dispH) / 2, dispW, dispH);
+  previewCtx.restore();
+
+  previewLabel.textContent = b.label;
+  const scaled = rendW > PREVIEW_MAX || rendH > PREVIEW_MAX;
+  previewDims.textContent  = rendW + ' × ' + rendH + 'px' + (scaled ? '  (preview scaled)' : '');
+
+  const btnRect    = btnEl.getBoundingClientRect();
+  const popH       = boxH + 5 + 22 + 5 + 18;
+  const topIdeal   = btnRect.top + (btnRect.height / 2) - (popH / 2);
+  const topClamped = Math.max(8, Math.min(topIdeal, window.innerHeight - popH - 8));
+  previewEl.style.top = topClamped + 'px';
+
+  previewEl.classList.add('visible');
+}
+
+function hideBrushPreview() {
+  previewEl.classList.remove('visible');
+}
+
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function buildSidebar() {
   const scroll = document.getElementById('brush-scroll');
@@ -535,6 +593,9 @@ function buildSidebar() {
         btn.classList.add('active');
         drawGhost();
       });
+
+      btn.addEventListener('mouseenter', () => showBrushPreview(b, btn));
+      btn.addEventListener('mouseleave', hideBrushPreview);
 
       grid.appendChild(btn);
     });
