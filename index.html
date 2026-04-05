@@ -661,6 +661,7 @@ wrap.addEventListener('wheel', e => {
 }, { passive: false });
 
 wrap.addEventListener('mousedown', e => {
+  if (e.target.closest('#toolbar')) return; // ← add this
   if (e.button === 1 || e.altKey) {
     isPanning = true;
     lastPx = e.clientX; lastPy = e.clientY;
