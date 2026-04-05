@@ -426,11 +426,11 @@ const BRUSHES = [
   { id:'lak-4',      category:'Lakes', label:'Lakes 4',  src:'stamps/Lakes4.png' },
 
   // ── Icons ──────────────────────────────────────────────────────────────────
-  { id:'ico-1',      category:'Icons', label:'Icon 1',   src:'stamps/Icons1.png' },
-  { id:'ico-2',      category:'Icons', label:'Icon 2',   src:'stamps/Icons2.png' },
-  { id:'ico-3',      category:'Icons', label:'Icon 3',   src:'stamps/Icons3.png' },
-  { id:'ico-4',      category:'Icons', label:'Icon 4',   src:'stamps/Icons4.png' },
-  { id:'ico-5',      category:'Icons', label:'Icon 5',   src:'stamps/Icons5.png' },
+  { id:'ico-1',      category:'Icons', label:'Icon 1',   src:'stamps/Icons1.png', scale: 0.5 },
+  { id:'ico-2',      category:'Icons', label:'Icon 2',   src:'stamps/Icons2.png', scale: 0.5 },
+  { id:'ico-3',      category:'Icons', label:'Icon 3',   src:'stamps/Icons3.png', scale: 1.5 },
+  { id:'ico-4',      category:'Icons', label:'Icon 4',   src:'stamps/Icons4.png', scale: 1.5 },
+  { id:'ico-5',      category:'Icons', label:'Icon 5',   src:'stamps/Icons5.png', scale: 1.5 },
   { id:'ico-compass',category:'Icons', label:'Compass',  src:'stamps/Compass.png' },
 
 ];
@@ -571,19 +571,20 @@ function drawGrid() {
 // ── Stamp rendering ───────────────────────────────────────────────────────────
 // Each stamp renders at its native PNG pixel dimensions × scale × zoom.
 // multiply blend mode makes white PNG backgrounds invisible.
-function stampDims(img, scale, forExport) {
+function stampDims(img, scale, forExport, brushScale) {
   const iw = img.naturalWidth  || img.width  || 100;
   const ih = img.naturalHeight || img.height || 100;
-  // On canvas coords (forExport): native size × scale
-  // On screen: also × zoom
-  const factor = forExport ? scale : scale * zoom;
+  const bs = brushScale || 1;
+  const factor = forExport ? scale * bs : scale * bs * zoom;
   return [iw * factor, ih * factor];
 }
 
 function drawStamp(ctx, stamp, forExport) {
   const img = brushImages[stamp.id];
   if (!img) return;
-  const [w, h] = stampDims(img, stamp.scale, forExport);
+  const brushDef = BRUSHES.find(b => b.id === stamp.id);
+  const brushScale = brushDef && brushDef.scale ? brushDef.scale : 1;
+  const [w, h] = stampDims(img, stamp.scale, forExport, brushScale);
   ctx.save();
   ctx.globalAlpha = stamp.opacity;
   ctx.globalCompositeOperation = 'multiply';
@@ -611,7 +612,9 @@ function drawGhost() {
   if (!mouseOnCanvas) return;
   const img = brushImages[selectedId];
   if (!img) return;
-  const [w, h] = stampDims(img, stampScale, false);
+  const brushDef = BRUSHES.find(b => b.id === selectedId);
+  const brushScale = brushDef && brushDef.scale ? brushDef.scale : 1;
+  const [w, h] = stampDims(img, stampScale, false, brushScale);
   hCtx.save();
   hCtx.globalAlpha = stampOpacity * 0.45;
   hCtx.globalCompositeOperation = 'multiply';
