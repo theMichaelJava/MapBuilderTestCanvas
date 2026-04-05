@@ -732,17 +732,65 @@ document.getElementById('clear-btn').addEventListener('click', () => {
 });
 
 document.getElementById('export-btn').addEventListener('click', () => {
+  const vw = wrap.clientWidth;
+  const vh = wrap.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+
   const exp = document.createElement('canvas');
-  exp.width = CANVAS_W; exp.height = CANVAS_H;
+  exp.width  = vw * dpr;
+  exp.height = vh * dpr;
   const ectx = exp.getContext('2d');
-  ectx.fillStyle = '#f2e8c8';
-  ectx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  history.forEach(s => drawStamp(ectx, s, true));
-  const a = document.createElement('a');
-  a.download = 'canvas-export.png';
-  a.href = exp.toDataURL('image/png');
-  a.click();
-  showToast('Exported as PNG');
+  ectx.scale(dpr, dpr);
+
+  // 1. Draw paperbg.jpg as the background, exactly as CSS renders it
+  //    (background-size: cover, background-position: center)
+  const bgImg = new Image();
+  bgImg.onload = () => {
+    // Replicate CSS background-size:cover / background-position:center
+    const imgAspect = bgImg.naturalWidth / bgImg.naturalHeight;
+    const wrapAspect = vw / vh;
+    let sx, sy, sw, sh;
+    if (imgAspect > wrapAspect) {
+      // Image is wider than wrap — crop sides
+      sh = bgImg.naturalHeight;
+      sw = sh * wrapAspect;
+      sx = (bgImg.naturalWidth - sw) / 2;
+      sy = 0;
+    } else {
+      // Image is taller than wrap — crop top/bottom
+      sw = bgImg.naturalWidth;
+      sh = sw / wrapAspect;
+      sx = 0;
+      sy = (bgImg.naturalHeight - sh) / 2;
+    }
+    ectx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, vw, vh);
+
+    // 2. Draw the grid canvas on top (it's already viewport-sized)
+    if (showGrid) ectx.drawImage(gridCvs, 0, 0, vw, vh);
+
+    // 3. Draw the stamp canvas on top (also viewport-sized, correct pan/zoom)
+    ectx.drawImage(stampCvs, 0, 0, vw, vh);
+
+    // 4. Download
+    const a = document.createElement('a');
+    a.download = 'map-export.png';
+    a.href = exp.toDataURL('image/png');
+    a.click();
+    showToast('Viewport exported as PNG');
+  };
+  bgImg.onerror = () => {
+    // paperbg.jpg not found — fall back to a plain fill
+    ectx.fillStyle = '#f2e8c8';
+    ectx.fillRect(0, 0, vw, vh);
+    if (showGrid) ectx.drawImage(gridCvs, 0, 0, vw, vh);
+    ectx.drawImage(stampCvs, 0, 0, vw, vh);
+    const a = document.createElement('a');
+    a.download = 'map-export.png';
+    a.href = exp.toDataURL('image/png');
+    a.click();
+    showToast('Viewport exported as PNG');
+  };
+  bgImg.src = 'paperbg.jpg';
 });
 
 document.getElementById('size-slider').addEventListener('input', function () {
