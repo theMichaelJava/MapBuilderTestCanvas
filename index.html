@@ -742,54 +742,69 @@ document.getElementById('export-btn').addEventListener('click', () => {
   const ectx = exp.getContext('2d');
   ectx.scale(dpr, dpr);
 
-  // 1. Draw paperbg.jpg as the background, exactly as CSS renders it
-  //    (background-size: cover, background-position: center)
-  const bgImg = new Image();
-  bgImg.onload = () => {
-    // Replicate CSS background-size:cover / background-position:center
-    const imgAspect = bgImg.naturalWidth / bgImg.naturalHeight;
-    const wrapAspect = vw / vh;
-    let sx, sy, sw, sh;
-    if (imgAspect > wrapAspect) {
-      // Image is wider than wrap — crop sides
-      sh = bgImg.naturalHeight;
-      sw = sh * wrapAspect;
-      sx = (bgImg.naturalWidth - sw) / 2;
-      sy = 0;
-    } else {
-      // Image is taller than wrap — crop top/bottom
-      sw = bgImg.naturalWidth;
-      sh = sw / wrapAspect;
-      sx = 0;
-      sy = (bgImg.naturalHeight - sh) / 2;
-    }
-    ectx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, vw, vh);
-
-    // 2. Draw the grid canvas on top (it's already viewport-sized)
+  function finish() {
+    // Draw grid then stamps on top
     if (showGrid) ectx.drawImage(gridCvs, 0, 0, vw, vh);
-
-    // 3. Draw the stamp canvas on top (also viewport-sized, correct pan/zoom)
     ectx.drawImage(stampCvs, 0, 0, vw, vh);
 
-    // 4. Download
-    const a = document.createElement('a');
-    a.download = 'map-export.png';
-    a.href = exp.toDataURL('image/png');
-    a.click();
-    showToast('Viewport exported as PNG');
+    try {
+      const a = document.createElement('a');
+      a.download = 'map-export.png';
+      a.href = exp.toDataURL('image/png');
+      a.click();
+      showToast('Exported as PNG');
+    } catch (e) {
+      // toDataURL blocked (CORS taint from background image) — retry without it
+      ectx.clearRect(0, 0, vw, vh);
+      ectx.fillStyle = '#f2e8c8';
+      ectx.fillRect(0, 0, vw, vh);
+      if (showGrid) ectx.drawImage(gridCvs, 0, 0, vw, vh);
+      ectx.drawImage(stampCvs, 0, 0, vw, vh);
+      const a = document.createElement('a');
+      a.download = 'map-export.png';
+      a.href = exp.toDataURL('image/png');
+      a.click();
+      showToast('Exported (no background)');
+    }
+  }
+
+  // Try to draw paperbg.jpg first; if it fails or taints, skip it
+  const bgImg = new Image();
+  bgImg.crossOrigin = 'anonymous';
+
+  bgImg.onload = () => {
+    try {
+      // Replicate CSS background-size:cover / background-position:center
+      const imgAspect  = bgImg.naturalWidth / bgImg.naturalHeight;
+      const wrapAspect = vw / vh;
+      let sx, sy, sw, sh;
+      if (imgAspect > wrapAspect) {
+        sh = bgImg.naturalHeight;
+        sw = sh * wrapAspect;
+        sx = (bgImg.naturalWidth - sw) / 2;
+        sy = 0;
+      } else {
+        sw = bgImg.naturalWidth;
+        sh = sw / wrapAspect;
+        sx = 0;
+        sy = (bgImg.naturalHeight - sh) / 2;
+      }
+      ectx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, vw, vh);
+    } catch (e) {
+      // Tainted — draw plain fill instead
+      ectx.fillStyle = '#f2e8c8';
+      ectx.fillRect(0, 0, vw, vh);
+    }
+    finish();
   };
+
   bgImg.onerror = () => {
-    // paperbg.jpg not found — fall back to a plain fill
+    // Image not found — use plain fill
     ectx.fillStyle = '#f2e8c8';
     ectx.fillRect(0, 0, vw, vh);
-    if (showGrid) ectx.drawImage(gridCvs, 0, 0, vw, vh);
-    ectx.drawImage(stampCvs, 0, 0, vw, vh);
-    const a = document.createElement('a');
-    a.download = 'map-export.png';
-    a.href = exp.toDataURL('image/png');
-    a.click();
-    showToast('Viewport exported as PNG');
+    finish();
   };
+
   bgImg.src = 'paperbg.jpg';
 });
 
