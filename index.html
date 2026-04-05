@@ -378,7 +378,7 @@
       <button class="tool-btn" id="clear-btn" title="Clear canvas">✕</button>
     </div>
 
-    <div id="hint">Scroll to zoom &nbsp;·&nbsp; Alt+drag to pan &nbsp;·&nbsp; Ctrl+Z undo</div>
+    <div id="hint">Scroll to zoom &nbsp;·&nbsp; Alt+drag to pan &nbsp;·&nbsp; [ ] resize &nbsp;·&nbsp; Ctrl+Z undo &nbsp;·&nbsp; Double-click sliders to reset &nbsp;·&nbsp; Right-click brush to preview</div>
     <div id="zoom-display">100%</div>
     <div id="coords-display">0, 0</div>
     <div id="toast"></div>
@@ -445,10 +445,10 @@ const BRUSHES = [
   { id:'clf-4',      category:'Cliffs', label:'Cliff 4',  src:'stamps/Cliff4.png' },
 
   // ── Rocks & Grass ──────────────────────────────────────────────────────────
-  { id:'rck-1',      category:'Rocks & Grass', label:'Rocks 1',  src:'stamps/Rocks1.png', scale:0.6 },
-  { id:'rck-2',      category:'Rocks & Grass', label:'Rocks 2',  src:'stamps/Rocks2.png', scale:0.6 },
-  { id:'grs-1',      category:'Rocks & Grass', label:'Grass 1',  src:'stamps/Grass1.png', scale:0.3 },
-  { id:'grs-2',      category:'Rocks & Grass', label:'Grass 2',  src:'stamps/Grass2.png', scale:0.3 },
+  { id:'rck-1',      category:'Rocks & Grass', label:'Rocks 1',  src:'stamps/Rocks1.png', scale:0.4 },
+  { id:'rck-2',      category:'Rocks & Grass', label:'Rocks 2',  src:'stamps/Rocks2.png', scale:0.4 },
+  { id:'grs-1',      category:'Rocks & Grass', label:'Grass 1',  src:'stamps/Grass1.png', scale:0.4 },
+  { id:'grs-2',      category:'Rocks & Grass', label:'Grass 2',  src:'stamps/Grass2.png', scale:0.4 },
 
   // ── Dunes ──────────────────────────────────────────────────────────────────
   { id:'dun-1',      category:'Dunes', label:'Dunes 1',  src:'stamps/Dunes1.png' },
@@ -612,6 +612,7 @@ function buildSidebar() {
 
       btn.addEventListener('click', () => {
         selectedId = b.id;
+        cachedBrushDef = b;
         document.querySelectorAll('.brush-btn').forEach(x => x.classList.remove('active'));
         btn.classList.add('active');
         hideBrushPreview();
@@ -703,13 +704,15 @@ function redrawStamps() {
 }
 
 // ── Ghost preview ─────────────────────────────────────────────────────────────
+// Cache for the currently selected brush def to avoid repeated array searches
+let cachedBrushDef = BRUSHES.find(b => b.id === selectedId);
+
 function drawGhost() {
   hCtx.clearRect(0, 0, ghostCvs.width, ghostCvs.height);
   if (!mouseOnCanvas) return;
   const img = brushImages[selectedId];
   if (!img) return;
-  const brushDef = BRUSHES.find(b => b.id === selectedId);
-  const brushScale = brushDef && brushDef.scale ? brushDef.scale : 1;
+  const brushScale = cachedBrushDef && cachedBrushDef.scale ? cachedBrushDef.scale : 1;
   const [w, h] = stampDims(img, stampScale, false, brushScale);
   hCtx.save();
   hCtx.globalAlpha = stampOpacity * 0.45;
@@ -771,6 +774,8 @@ wrap.addEventListener('mousedown', e => {
   }
 });
 
+let panRafPending = false;
+
 wrap.addEventListener('mousemove', e => {
   const r = wrap.getBoundingClientRect();
   mouseVX = e.clientX - r.left;
@@ -780,9 +785,17 @@ wrap.addEventListener('mousemove', e => {
     panX += e.clientX - lastPx;
     panY += e.clientY - lastPy;
     lastPx = e.clientX; lastPy = e.clientY;
-    drawGrid(); redrawStamps();
+    // Throttle the expensive grid+stamp redraw to one per animation frame
+    if (!panRafPending) {
+      panRafPending = true;
+      requestAnimationFrame(() => {
+        drawGrid(); redrawStamps();
+        panRafPending = false;
+      });
+    }
   }
 
+  // Ghost always updates immediately — it's a separate lightweight canvas
   drawGhost();
 
   const [cx, cy] = viewToCanvas(mouseVX, mouseVY);
