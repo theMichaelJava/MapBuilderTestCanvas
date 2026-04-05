@@ -194,7 +194,7 @@
       flex: 1;
       position: relative;
       overflow: hidden;
-      background-image: url('paperbg.jpg');
+      background-image: url('paperbg.webp');
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -861,11 +861,53 @@ document.getElementById('export-btn').addEventListener('click', () => {
   const ectx = exp.getContext('2d');
   ectx.scale(dpr, dpr);
 
-  function finish() {
-    // Draw grid then stamps on top
+  function drawWatermark(ctx, logoImg, w, h) {
+    const PAD       = 12;
+    const LOGO_H    = 26;
+    const FONT_SIZE = 11;
+    const TEXT      = 'Created with the Map Builder Test Canvas from Map Effects.  |  MapEffects.co';
+    const FONT      = FONT_SIZE + "px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.font = FONT;
+    const textW = ctx.measureText(TEXT).width;
+    const logoW = logoImg ? Math.round(LOGO_H * (logoImg.naturalWidth / logoImg.naturalHeight)) : 0;
+    const GAP   = logoImg ? 8 : 0;
+    const pillW = PAD + logoW + GAP + textW + PAD;
+    const pillH = LOGO_H + PAD;
+    const pillX = PAD;
+    const pillY = h - pillH - PAD;
+    const r     = 6;
+    ctx.save();
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = '#1a1a18';
+    ctx.beginPath();
+    ctx.moveTo(pillX + r, pillY);
+    ctx.lineTo(pillX + pillW - r, pillY);
+    ctx.quadraticCurveTo(pillX + pillW, pillY, pillX + pillW, pillY + r);
+    ctx.lineTo(pillX + pillW, pillY + pillH - r);
+    ctx.quadraticCurveTo(pillX + pillW, pillY + pillH, pillX + pillW - r, pillY + pillH);
+    ctx.lineTo(pillX + r, pillY + pillH);
+    ctx.quadraticCurveTo(pillX, pillY + pillH, pillX, pillY + pillH - r);
+    ctx.lineTo(pillX, pillY + r);
+    ctx.quadraticCurveTo(pillX, pillY, pillX + r, pillY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    if (logoImg) {
+      ctx.drawImage(logoImg, pillX + PAD, pillY + (pillH - LOGO_H) / 2, logoW, LOGO_H);
+    }
+    ctx.font = FONT;
+    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = 0.90;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(TEXT, pillX + PAD + logoW + GAP, pillY + pillH / 2);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function finish(logoImg) {
     if (showGrid) ectx.drawImage(gridCvs, 0, 0, vw, vh);
     ectx.drawImage(stampCvs, 0, 0, vw, vh);
-
+    drawWatermark(ectx, logoImg, vw, vh);
     try {
       const a = document.createElement('a');
       a.download = 'map-export.png';
@@ -873,12 +915,12 @@ document.getElementById('export-btn').addEventListener('click', () => {
       a.click();
       showToast('Exported as PNG');
     } catch (e) {
-      // toDataURL blocked (CORS taint from background image) — retry without it
       ectx.clearRect(0, 0, vw, vh);
       ectx.fillStyle = '#f2e8c8';
       ectx.fillRect(0, 0, vw, vh);
       if (showGrid) ectx.drawImage(gridCvs, 0, 0, vw, vh);
       ectx.drawImage(stampCvs, 0, 0, vw, vh);
+      drawWatermark(ectx, logoImg, vw, vh);
       const a = document.createElement('a');
       a.download = 'map-export.png';
       a.href = exp.toDataURL('image/png');
@@ -887,44 +929,46 @@ document.getElementById('export-btn').addEventListener('click', () => {
     }
   }
 
-  // Try to draw paperbg.jpg first; if it fails or taints, skip it
-  const bgImg = new Image();
-  bgImg.crossOrigin = 'anonymous';
-
-  bgImg.onload = () => {
-    try {
-      // Replicate CSS background-size:cover / background-position:center
-      const imgAspect  = bgImg.naturalWidth / bgImg.naturalHeight;
-      const wrapAspect = vw / vh;
-      let sx, sy, sw, sh;
-      if (imgAspect > wrapAspect) {
-        sh = bgImg.naturalHeight;
-        sw = sh * wrapAspect;
-        sx = (bgImg.naturalWidth - sw) / 2;
-        sy = 0;
-      } else {
-        sw = bgImg.naturalWidth;
-        sh = sw / wrapAspect;
-        sx = 0;
-        sy = (bgImg.naturalHeight - sh) / 2;
+  function loadBgAndFinish(logoImg) {
+    const bgImg = new Image();
+    bgImg.crossOrigin = 'anonymous';
+    bgImg.onload = () => {
+      try {
+        const imgAspect  = bgImg.naturalWidth / bgImg.naturalHeight;
+        const wrapAspect = vw / vh;
+        let sx, sy, sw, sh;
+        if (imgAspect > wrapAspect) {
+          sh = bgImg.naturalHeight;
+          sw = sh * wrapAspect;
+          sx = (bgImg.naturalWidth - sw) / 2;
+          sy = 0;
+        } else {
+          sw = bgImg.naturalWidth;
+          sh = sw / wrapAspect;
+          sx = 0;
+          sy = (bgImg.naturalHeight - sh) / 2;
+        }
+        ectx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, vw, vh);
+      } catch (e) {
+        ectx.fillStyle = '#f2e8c8';
+        ectx.fillRect(0, 0, vw, vh);
       }
-      ectx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, vw, vh);
-    } catch (e) {
-      // Tainted — draw plain fill instead
+      finish(logoImg);
+    };
+    bgImg.onerror = () => {
       ectx.fillStyle = '#f2e8c8';
       ectx.fillRect(0, 0, vw, vh);
-    }
-    finish();
-  };
+      finish(logoImg);
+    };
+    bgImg.src = 'paperbg.webp';
+  }
 
-  bgImg.onerror = () => {
-    // Image not found — use plain fill
-    ectx.fillStyle = '#f2e8c8';
-    ectx.fillRect(0, 0, vw, vh);
-    finish();
-  };
-
-  bgImg.src = 'paperbg.jpg';
+  // Load logo first, then background, then composite and download
+  const logoImg = new Image();
+  logoImg.crossOrigin = 'anonymous';
+  logoImg.onload  = () => loadBgAndFinish(logoImg);
+  logoImg.onerror = () => loadBgAndFinish(null);
+  logoImg.src = 'logo.png';
 });
 
 document.getElementById('size-slider').addEventListener('input', function () {
