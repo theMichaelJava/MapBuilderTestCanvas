@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Map Builder Test Canvas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -300,50 +303,39 @@
     }
     /* ── Brush preview popup ───────────────────────────────────────── */
     #brush-preview {
-      position: fixed;
-      z-index: 9999;
-      pointer-events: none;
-      display: none;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 5px;
+      position: fixed; z-index: 9999; pointer-events: none;
+      display: none; flex-direction: column; align-items: flex-start; gap: 5px;
     }
     #brush-preview.visible { display: flex; }
     #brush-preview-box {
-      background: var(--bg);
-      border: 0.5px solid var(--border-2);
+      background: var(--bg); border: 0.5px solid var(--border-2);
       border-radius: var(--radius-lg);
       box-shadow: 0 6px 24px rgba(0,0,0,0.15), 0 1px 4px rgba(0,0,0,0.08);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      min-width: 56px;
-      min-height: 56px;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; min-width: 56px; min-height: 56px;
     }
     #brush-preview-canvas { display: block; }
     #brush-preview-label {
-      font-size: 11px;
-      font-weight: 500;
-      color: var(--text);
-      background: var(--bg);
-      border: 0.5px solid var(--border);
-      border-radius: var(--radius);
-      padding: 3px 10px;
-      white-space: nowrap;
+      font-size: 11px; font-weight: 500; color: var(--text);
+      background: var(--bg); border: 0.5px solid var(--border);
+      border-radius: var(--radius); padding: 3px 10px; white-space: nowrap;
     }
     #brush-preview-dims {
-      font-size: 10px;
-      color: var(--text-3);
-      background: var(--bg);
-      border: 0.5px solid var(--border);
-      border-radius: var(--radius);
-      padding: 2px 10px;
-      white-space: nowrap;
+      font-size: 10px; color: var(--text-3); background: var(--bg);
+      border: 0.5px solid var(--border); border-radius: var(--radius);
+      padding: 2px 10px; white-space: nowrap;
     }
   </style>
 </head>
 <body>
+
+<div id="brush-preview">
+  <div id="brush-preview-box">
+    <canvas id="brush-preview-canvas"></canvas>
+  </div>
+  <div id="brush-preview-label"></div>
+  <div id="brush-preview-dims"></div>
+</div>
 
 <div id="app">
 
@@ -386,20 +378,12 @@
       <button class="tool-btn" id="clear-btn" title="Clear canvas">✕</button>
     </div>
 
-    <div id="hint">Scroll to zoom &nbsp;·&nbsp; Alt+drag to pan &nbsp;·&nbsp; Ctrl+Z undo &nbsp;·&nbsp; Right-click a brush to preview</div>
+    <div id="hint">Scroll to zoom &nbsp;·&nbsp; Alt+drag to pan &nbsp;·&nbsp; Ctrl+Z undo &nbsp;·&nbsp; Right-click a brush to preview &nbsp;·&nbsp; [ ] to resize</div>
     <div id="zoom-display">100%</div>
     <div id="coords-display">0, 0</div>
     <div id="toast"></div>
   </div>
 
-</div>
-
-<div id="brush-preview">
-  <div id="brush-preview-box">
-    <canvas id="brush-preview-canvas"></canvas>
-  </div>
-  <div id="brush-preview-label"></div>
-  <div id="brush-preview-dims"></div>
 </div>
 
 <script>
@@ -545,8 +529,7 @@ const PREVIEW_MAX  = 220;
 function showBrushPreview(b, x, y) {
   const img = brushImages[b.id];
   if (!img || !img.naturalWidth) return;
-  const iw = img.naturalWidth;
-  const ih = img.naturalHeight;
+  const iw = img.naturalWidth, ih = img.naturalHeight;
   const brushDef   = BRUSHES.find(d => d.id === b.id);
   const brushScale = (brushDef && brushDef.scale) ? brushDef.scale : 1;
   const factor     = stampScale * brushScale * zoom;
@@ -556,12 +539,10 @@ function showBrushPreview(b, x, y) {
   const fitScale   = longest > PREVIEW_MAX ? PREVIEW_MAX / longest : 1;
   const dispW      = Math.max(1, Math.round(rendW * fitScale));
   const dispH      = Math.max(1, Math.round(rendH * fitScale));
-  const boxW       = Math.max(dispW, 64);
-  const boxH       = Math.max(dispH, 64);
+  const boxW = Math.max(dispW, 64), boxH = Math.max(dispH, 64);
   previewBox.style.width  = boxW + 'px';
   previewBox.style.height = boxH + 'px';
-  previewCvs.width  = boxW;
-  previewCvs.height = boxH;
+  previewCvs.width = boxW; previewCvs.height = boxH;
   previewCtx.clearRect(0, 0, boxW, boxH);
   previewCtx.save();
   previewCtx.globalAlpha = stampOpacity;
@@ -570,8 +551,7 @@ function showBrushPreview(b, x, y) {
   previewLabel.textContent = b.label;
   const scaled = rendW > PREVIEW_MAX || rendH > PREVIEW_MAX;
   previewDims.textContent  = rendW + ' × ' + rendH + 'px' + (scaled ? ' (scaled to fit)' : '');
-  const popW = boxW + 24;
-  const popH = boxH + 24 + 22 + 18;
+  const popW = boxW + 24, popH = boxH + 24 + 22 + 18;
   const left = (x + 12 + popW > window.innerWidth)  ? x - popW - 8 : x + 12;
   const top  = (y + popH      > window.innerHeight) ? window.innerHeight - popH - 8 : y;
   previewEl.style.left = left + 'px';
@@ -579,12 +559,9 @@ function showBrushPreview(b, x, y) {
   previewEl.classList.add('visible');
 }
 
-function hideBrushPreview() {
-  previewEl.classList.remove('visible');
-}
+function hideBrushPreview() { previewEl.classList.remove('visible'); }
 
 document.addEventListener('click', hideBrushPreview);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') hideBrushPreview(); });
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function buildSidebar() {
@@ -818,20 +795,18 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
     e.preventDefault(); redo();
   }
-  // [ and ] to decrease / increase brush size by 5%
   if (e.key === '[' || e.key === ']') {
     e.preventDefault();
     const slider = document.getElementById('size-slider');
-    const step = 5;
-    const current = +slider.value;
     const next = e.key === ']'
-      ? Math.min(+slider.max, current + step)
-      : Math.max(+slider.min, current - step);
+      ? Math.min(+slider.max, +slider.value + 5)
+      : Math.max(+slider.min, +slider.value - 5);
     slider.value = next;
     stampScale = next / 100;
     document.getElementById('size-val').textContent = next + '%';
     drawGhost();
   }
+  if (e.key === 'Escape') hideBrushPreview();
 });
 
 document.getElementById('undo-btn').addEventListener('click', undo);
@@ -862,20 +837,20 @@ document.getElementById('export-btn').addEventListener('click', () => {
   ectx.scale(dpr, dpr);
 
   function drawWatermark(ctx, logoImg, w, h) {
-    const PAD       = 12;
-    const LOGO_H    = 26;
-    const FONT_SIZE = 11;
+    const PAD       = 14;
+    const LOGO_H    = 39;
+    const FONT_SIZE = 16.5;
     const TEXT      = 'Created with the Map Builder Test Canvas from Map Effects.  |  MapEffects.co';
-    const FONT      = FONT_SIZE + "px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    const FONT      = '600 ' + FONT_SIZE + "px 'EB Garamond', Georgia, serif";
     ctx.font = FONT;
     const textW = ctx.measureText(TEXT).width;
     const logoW = logoImg ? Math.round(LOGO_H * (logoImg.naturalWidth / logoImg.naturalHeight)) : 0;
-    const GAP   = logoImg ? 8 : 0;
+    const GAP   = logoImg ? 10 : 0;
     const pillW = PAD + logoW + GAP + textW + PAD;
     const pillH = LOGO_H + PAD;
     const pillX = PAD;
     const pillY = h - pillH - PAD;
-    const r     = 6;
+    const r     = 7;
     ctx.save();
     ctx.globalAlpha = 0.72;
     ctx.fillStyle = '#1a1a18';
@@ -977,8 +952,7 @@ document.getElementById('size-slider').addEventListener('input', function () {
   drawGhost();
 });
 document.getElementById('size-slider').addEventListener('dblclick', function () {
-  this.value = 100;
-  stampScale = 1.0;
+  this.value = 100; stampScale = 1.0;
   document.getElementById('size-val').textContent = '100%';
   drawGhost();
 });
@@ -989,8 +963,7 @@ document.getElementById('rot-slider').addEventListener('input', function () {
   drawGhost();
 });
 document.getElementById('rot-slider').addEventListener('dblclick', function () {
-  this.value = 0;
-  stampRot = 0;
+  this.value = 0; stampRot = 0;
   document.getElementById('rot-val').textContent = '0°';
   drawGhost();
 });
@@ -1001,8 +974,7 @@ document.getElementById('opacity-slider').addEventListener('input', function () 
   drawGhost();
 });
 document.getElementById('opacity-slider').addEventListener('dblclick', function () {
-  this.value = 100;
-  stampOpacity = 1.0;
+  this.value = 100; stampOpacity = 1.0;
   document.getElementById('opacity-val').textContent = '100%';
   drawGhost();
 });
