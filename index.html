@@ -308,9 +308,7 @@
       align-items: flex-start;
       gap: 5px;
     }
-    #brush-preview.visible {
-      display: flex;
-    }
+    #brush-preview.visible { display: flex; }
     #brush-preview-box {
       background: var(--bg);
       border: 0.5px solid var(--border-2);
@@ -342,12 +340,6 @@
       border-radius: var(--radius);
       padding: 2px 10px;
       white-space: nowrap;
-    }
-    #brush-preview-hint {
-      font-size: 10px;
-      color: var(--text-3);
-      white-space: nowrap;
-      padding: 0 2px;
     }
   </style>
 </head>
@@ -394,7 +386,7 @@
       <button class="tool-btn" id="clear-btn" title="Clear canvas">✕</button>
     </div>
 
-    <div id="hint">Scroll to zoom &nbsp;·&nbsp; Alt+drag to pan &nbsp;·&nbsp; Ctrl+Z undo</div>
+    <div id="hint">Scroll to zoom &nbsp;·&nbsp; Alt+drag to pan &nbsp;·&nbsp; Ctrl+Z undo &nbsp;·&nbsp; Right-click a brush to preview</div>
     <div id="zoom-display">100%</div>
     <div id="coords-display">0, 0</div>
     <div id="toast"></div>
@@ -408,7 +400,6 @@
   </div>
   <div id="brush-preview-label"></div>
   <div id="brush-preview-dims"></div>
-  <div id="brush-preview-hint">click to select · right-click to preview</div>
 </div>
 
 <script>
@@ -470,8 +461,8 @@ const BRUSHES = [
   { id:'clf-4',      category:'Cliffs', label:'Cliff 4',  src:'stamps/Cliff4.png' },
 
   // ── Rocks & Grass ──────────────────────────────────────────────────────────
-  { id:'rck-1',      category:'Rocks & Grass', label:'Rocks 1',  src:'stamps/Rocks1.png', scale:0.25 },
-  { id:'rck-2',      category:'Rocks & Grass', label:'Rocks 2',  src:'stamps/Rocks2.png', scale:0.25 },
+  { id:'rck-1',      category:'Rocks & Grass', label:'Rocks 1',  src:'stamps/Rocks1.png', scale:0.5 },
+  { id:'rck-2',      category:'Rocks & Grass', label:'Rocks 2',  src:'stamps/Rocks2.png', scale:0.5 },
   { id:'grs-1',      category:'Rocks & Grass', label:'Grass 1',  src:'stamps/Grass1.png', scale:0.25 },
   { id:'grs-2',      category:'Rocks & Grass', label:'Grass 2',  src:'stamps/Grass2.png', scale:0.25 },
 
@@ -554,7 +545,6 @@ const PREVIEW_MAX  = 220;
 function showBrushPreview(b, x, y) {
   const img = brushImages[b.id];
   if (!img || !img.naturalWidth) return;
-
   const iw = img.naturalWidth;
   const ih = img.naturalHeight;
   const brushDef   = BRUSHES.find(d => d.id === b.id);
@@ -562,15 +552,12 @@ function showBrushPreview(b, x, y) {
   const factor     = stampScale * brushScale * zoom;
   const rendW      = Math.round(iw * factor);
   const rendH      = Math.round(ih * factor);
-
-  // Scale to fit preview box
-  const longest  = Math.max(rendW, rendH, 1);
-  const fitScale = longest > PREVIEW_MAX ? PREVIEW_MAX / longest : 1;
-  const dispW    = Math.max(1, Math.round(rendW * fitScale));
-  const dispH    = Math.max(1, Math.round(rendH * fitScale));
-  const boxW     = Math.max(dispW, 64);
-  const boxH     = Math.max(dispH, 64);
-
+  const longest    = Math.max(rendW, rendH, 1);
+  const fitScale   = longest > PREVIEW_MAX ? PREVIEW_MAX / longest : 1;
+  const dispW      = Math.max(1, Math.round(rendW * fitScale));
+  const dispH      = Math.max(1, Math.round(rendH * fitScale));
+  const boxW       = Math.max(dispW, 64);
+  const boxH       = Math.max(dispH, 64);
   previewBox.style.width  = boxW + 'px';
   previewBox.style.height = boxH + 'px';
   previewCvs.width  = boxW;
@@ -580,17 +567,13 @@ function showBrushPreview(b, x, y) {
   previewCtx.globalAlpha = stampOpacity;
   previewCtx.drawImage(img, (boxW - dispW) / 2, (boxH - dispH) / 2, dispW, dispH);
   previewCtx.restore();
-
   previewLabel.textContent = b.label;
   const scaled = rendW > PREVIEW_MAX || rendH > PREVIEW_MAX;
   previewDims.textContent  = rendW + ' × ' + rendH + 'px' + (scaled ? ' (scaled to fit)' : '');
-
-  // Position popup to the right of the click, clamped to viewport
   const popW = boxW + 24;
-  const popH = boxH + 24 + 22 + 18 + 14;
+  const popH = boxH + 24 + 22 + 18;
   const left = (x + 12 + popW > window.innerWidth)  ? x - popW - 8 : x + 12;
   const top  = (y + popH      > window.innerHeight) ? window.innerHeight - popH - 8 : y;
-
   previewEl.style.left = left + 'px';
   previewEl.style.top  = top  + 'px';
   previewEl.classList.add('visible');
@@ -600,7 +583,6 @@ function hideBrushPreview() {
   previewEl.classList.remove('visible');
 }
 
-// Clicking anywhere outside the sidebar hides the preview
 document.addEventListener('click', hideBrushPreview);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') hideBrushPreview(); });
 
@@ -836,6 +818,20 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
     e.preventDefault(); redo();
   }
+  // [ and ] to decrease / increase brush size by 5%
+  if (e.key === '[' || e.key === ']') {
+    e.preventDefault();
+    const slider = document.getElementById('size-slider');
+    const step = 5;
+    const current = +slider.value;
+    const next = e.key === ']'
+      ? Math.min(+slider.max, current + step)
+      : Math.max(+slider.min, current - step);
+    slider.value = next;
+    stampScale = next / 100;
+    document.getElementById('size-val').textContent = next + '%';
+    drawGhost();
+  }
 });
 
 document.getElementById('undo-btn').addEventListener('click', undo);
@@ -936,14 +932,34 @@ document.getElementById('size-slider').addEventListener('input', function () {
   document.getElementById('size-val').textContent = this.value + '%';
   drawGhost();
 });
+document.getElementById('size-slider').addEventListener('dblclick', function () {
+  this.value = 100;
+  stampScale = 1.0;
+  document.getElementById('size-val').textContent = '100%';
+  drawGhost();
+});
+
 document.getElementById('rot-slider').addEventListener('input', function () {
   stampRot = +this.value;
   document.getElementById('rot-val').textContent = this.value + '°';
   drawGhost();
 });
+document.getElementById('rot-slider').addEventListener('dblclick', function () {
+  this.value = 0;
+  stampRot = 0;
+  document.getElementById('rot-val').textContent = '0°';
+  drawGhost();
+});
+
 document.getElementById('opacity-slider').addEventListener('input', function () {
   stampOpacity = +this.value / 100;
   document.getElementById('opacity-val').textContent = this.value + '%';
+  drawGhost();
+});
+document.getElementById('opacity-slider').addEventListener('dblclick', function () {
+  this.value = 100;
+  stampOpacity = 1.0;
+  document.getElementById('opacity-val').textContent = '100%';
   drawGhost();
 });
 
