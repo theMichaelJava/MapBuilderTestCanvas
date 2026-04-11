@@ -852,7 +852,7 @@ document.getElementById('clear-btn').addEventListener('click', () => {
 // Plain black EB Garamond text with a subtle white glow for legibility.
 let watermarkLogoImg = null;
 const watermarkCvs = document.createElement('canvas');
-watermarkCvs.style.cssText = 'position:absolute;bottom:0;left:0;pointer-events:none;z-index:5;';
+watermarkCvs.style.cssText = 'position:absolute;bottom:0;center:0;pointer-events:none;z-index:5;';
 wrap.appendChild(watermarkCvs);
 const wmCtx = watermarkCvs.getContext('2d');
 
